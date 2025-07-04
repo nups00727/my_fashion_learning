@@ -1,19 +1,19 @@
 import json
-from unittest import result
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from tqdm import tqdm
-import os
 from dotenv import load_dotenv
-import requests, certifi
 import torch
 import requests
 from PIL import Image
 from io import BytesIO
 import open_clip
+import numpy as np
+from langchain_core.documents import Document
+import faiss
 
 # Load your JSON data
-with open("nikebalance-result.json", "r") as f:
+with open("resources/nikebalance-result.json", "r") as f:
     data = json.load(f)
 
 # Load variables from .env file
@@ -91,12 +91,29 @@ for item in tqdm(texts):
         "combined_embedding": None  # Optional: average or concatenate embeddings
     })
 
-    print(f"Processing embeddings results: {results}")
+    #print(f"Processing embeddings results: {results}")
 
+    combined = []
+    for item in results:
+      text_emb = np.array(item["text_embedding"] , dtype='float32')
+      image_emb = np.array(item["image_embedding"] , dtype='float32')
+    
+      combined = np.concatenate([text_emb, image_emb])
+      #Convert to 2D array for FAISS
+      combined = combined.reshape(1, -1)
+      item["combined_embedding"] = combined
 
+    print(f"Combined embeddings: {combined[:5]}")  # Print first 5 combined embeddings for verification
 
-# Create the vector store
-#vectorstore = FAISS.from_texts(texts, results)
+# Create a FAISS index
+# Number of vectors
+num_vectors = combined.shape[0]
+#Dimentionality of each vector
+dim = combined.shape[1]
+faiss_index = faiss.IndexFlatIP(dim)  # Inner product for cosine similarity
+
+# Add vectors to the FAISS index
+faiss_index.add(np.array(combined, dtype=np.float32))
 
 # Save the vector store for later use
-#vectorstore.save_local("faiss_index")
+faiss.write_index(faiss_index, "resources/faiss_index")
